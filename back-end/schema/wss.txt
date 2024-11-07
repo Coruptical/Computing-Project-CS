@@ -1,0 +1,7 @@
+Below is the schema I will follow for incoming messages via WebSocket.
+This is due to change, as I will need to implement security features very soon after functionality is made.
+
+After a WebSocket connection is established, json format will be decoded to process incoming requests
+If a WebSocket receives something that doesn't follow this format, the connection to that WebSocket will just be closed.
+
+Register:
