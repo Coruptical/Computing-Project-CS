@@ -1,6 +1,7 @@
 import websockets
 import asyncio
 import threading
+import json
 
 from websockets.legacy.server import WebSocketServerProtocol
 
@@ -10,13 +11,13 @@ class WebsocketServer:
 
     # This method is called when a websocket is connected to the server.
     async def handle_websocket(self, websocket: WebSocketServerProtocol, path):
+        print("WebSocket connected")
         self.active_clients.add(websocket)
         try:
             while True:
                 async for message in websocket:
-                    for client in self.active_clients:
-                        await client.send(message)
-                        print(message)
+                    data = json.loads(message)
+                    print(data)
         except websockets.ConnectionClosed:
             self.active_clients.remove(websocket)
         
