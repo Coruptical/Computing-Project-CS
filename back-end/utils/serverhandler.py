@@ -2,12 +2,18 @@ import websockets
 import asyncio
 import threading
 import json
+from utils.requesthandler import RequestHandler
 
 from websockets.legacy.server import WebSocketServerProtocol
 
 class WebsocketServer:
     # This set holds all of the active "clients" (WebSocket connections) that are communicating with the server.
     active_clients = set()
+    
+    requestHandler: RequestHandler = None
+    
+    def __init__(self, requestHandler: RequestHandler):
+        self.requestHandler = requestHandler
 
     # This method is called when a websocket is connected to the server.
     async def handle_websocket(self, websocket: WebSocketServerProtocol, path):
@@ -17,9 +23,21 @@ class WebsocketServer:
             while True:
                 async for message in websocket:
                     data = json.loads(message)
-                    print(data)
+                    requestType = None
+                    try:
+                        requestType = data['requestType']
+                    except:
+                        continue
+                    
+                    if requestType == "REGISTER":
+                        await self.requestHandler.handleRegisterRequest(data, websocket)
+                    elif requestType == "LOGIN":
+                        await self.requestHandler.handleLoginRequest(data, websocket)
+                    else:
+                        print(requestType)
         except websockets.ConnectionClosed:
             self.active_clients.remove(websocket)
+            print("WebSocket disconnected")
         
     # Creates a new loop to handle_websocket method to process new incoming connections.
     def websocket_caller(self):
