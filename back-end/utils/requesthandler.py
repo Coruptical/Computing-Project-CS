@@ -1,7 +1,6 @@
 import utils.classutils as cutils
 from utils.databasehandler import DatabaseHandler
 import json
-
 from websockets.legacy.server import WebSocketServerProtocol
 
 class RequestHandler:
@@ -10,9 +9,6 @@ class RequestHandler:
     def __init__(self, databaseHandler: DatabaseHandler):
         self._databaseHandler = databaseHandler
     
-    # TODO: Create pseudocode for this since we're classing this as larger "algorithm"
-    
-    # TODO: Talk about the error I got while trying to fix the password comparisons
     async def handleRegisterRequest(self, data: dict, websocket: WebSocketServerProtocol):
         username = data['username']
         password = data['password']
@@ -30,20 +26,120 @@ class RequestHandler:
             await websocket.send(json.dumps({'response': 'SUCCESS'}))
         else:
             await websocket.send(json.dumps({'error': 'FAILED'}))
-            
-    async def handleLoginRequest(self, data: dict, websocket: WebSocketServerProtocol):
+        
+    async def handleLoginRequest(self, data: dict, websocket: WebSocketServerProtocol) -> dict:
         username = data['username']
         password = data['password']
         print(password)
         
+        response = {
+            "success": False,
+            "userID": ""
+        }
+        
         usernameExists = self._databaseHandler.userExists(username)
         if not usernameExists:
             await websocket.send(json.dumps({'error': 'USERNAME_NOT_EXIST'}))
-            return
+            return response
         
         salt, passwordHash = self._databaseHandler.fetchPasswordAndSalt(username)
         passwordMatches = cutils.check_password(cutils.decode64(salt), passwordHash, password)
         if passwordMatches:
             print("Your password matches.")
+            uuid = self._databaseHandler.getUUID(username)
+            if uuid != None:
+                response["userID"] = uuid 
+                response["success"] = True
         else:
             print("Password doesn't match")
+        
+        return response
+            
+    async def handleUserAddFriend(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
+        print(userID)
+        print(data)
+        targetUsername = data['targetUsername']
+        
+        usernameTargetExists = self._databaseHandler.userExists(targetUsername)
+        if not usernameTargetExists:
+            await websocket.send(json.dumps({'error': 'USERNAME_TARGET_NOT_EXIST'}))
+            return
+        
+        targetID = self._databaseHandler.getUUID(targetUsername)
+        friends = self._databaseHandler.getFriends(userID)
+        print(friends)
+        if targetID in friends:
+            await websocket.send(json.dumps({'error': 'FRIEND_CONNECTION_EXISTS'}))
+            return
+        
+        requestActive = self._databaseHandler.checkFriendRequest(userID, targetID)
+        if requestActive:
+            await websocket.send(json.dumps({'error': 'FRIEND_REQUEST_EXISTS'}))
+            return
+        self._databaseHandler.createFriendRequest(userID, targetID)   
+        
+    async def handleUserRemoveFriend(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
+        print(userID)
+        print(data)
+        targetUsername = data['targetUsername']
+        
+        usernameTargetExists = self._databaseHandler.userExists(targetUsername)
+        if not usernameTargetExists:
+            await websocket.send(json.dumps({'error': 'USERNAME_TARGET_NOT_EXIST'}))
+            return
+        
+        targetID = self._databaseHandler.getUUID(targetUsername)
+        friends = self._databaseHandler.getFriends(userID)
+        print(friends)
+        if targetID not in friends:
+            await websocket.send(json.dumps({'error': 'FRIEND_CONNECTION_NOT_EXISTS'}))
+            return
+        
+        success = self._databaseHandler.removeFriendConnection(userID, targetID)
+        if success:
+            await websocket.send(json.dumps({'response': 'FRIEND_CONNECTION_REMOVED'}))
+    
+    async def handleUserAcceptRequest(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
+        print(userID)
+        print(data)
+        targetUsername = data['targetUsername']
+        
+        usernameTargetExists = self._databaseHandler.userExists(targetUsername)
+        if not usernameTargetExists:
+            await websocket.send(json.dumps({'error': 'USERNAME_TARGET_NOT_EXIST'}))
+            return
+        
+        targetID = self._databaseHandler.getUUID(targetUsername)
+        friends = self._databaseHandler.getFriends(userID)
+        print(friends)
+        if targetID in friends:
+            await websocket.send(json.dumps({'error': 'FRIEND_CONNECTION_EXISTS'}))
+            return
+        
+        success = self._databaseHandler.createFriendConnection(userID, targetID)
+        if success:
+            print("Friendship created.")
+        self._databaseHandler.setFriendRequestInactive(userID, targetID)
+        await websocket.send(json.dumps({'response': 'FRIEND_REQUEST_ACCEPTED'}))
+    
+    async def handleUserDenyRequest(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
+        print(userID)
+        print(data)
+        targetUsername = data['targetUsername']
+        
+        usernameTargetExists = self._databaseHandler.userExists(targetUsername)
+        if not usernameTargetExists:
+            await websocket.send(json.dumps({'error': 'USERNAME_TARGET_NOT_EXIST'}))
+            return
+        
+        targetID = self._databaseHandler.getUUID(targetUsername)
+        friends = self._databaseHandler.getFriends(userID)
+        print(friends)
+        if targetID in friends:
+            await websocket.send(json.dumps({'error': 'FRIEND_CONNECTION_EXISTS'}))
+            return
+        
+        
+        success = self._databaseHandler.setFriendRequestInactive(userID, targetID)
+        if success:
+            await websocket.send(json.dumps({'response': 'FRIEND_REQUEST_DENIED'}))

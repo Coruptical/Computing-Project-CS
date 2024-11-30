@@ -10,6 +10,16 @@ class WebsocketServer:
     # This set holds all of the active "clients" (WebSocket connections) that are communicating with the server.
     active_clients = set()
     
+    authorised_clients: dict[str: WebSocketServerProtocol] = {}
+    authorised_socketIDS: dict[WebSocketServerProtocol: str] = {}
+    authorised_sockets: set[WebSocketServerProtocol] = set()
+    
+    AUTHORISED_REQUESTS = ["USER_ADD_FRIEND",
+                           "USER_REMOVE_FRIEND",
+                           "USER_MESSAGE",
+                           "USER_ACCEPT_REQUEST",
+                           "USER_DENY_REQUEST"]
+    
     requestHandler: RequestHandler = None
     
     def __init__(self, requestHandler: RequestHandler):
@@ -29,10 +39,30 @@ class WebsocketServer:
                     except:
                         continue
                     
+                    if requestType in self.AUTHORISED_REQUESTS and websocket not in self.authorised_sockets:
+                        await websocket.close()
+                        self.active_clients.remove(websocket)
+                        print("WebSocket connection closed due to unauthorised request.")
+                        return
+                    
                     if requestType == "REGISTER":
                         await self.requestHandler.handleRegisterRequest(data, websocket)
                     elif requestType == "LOGIN":
-                        await self.requestHandler.handleLoginRequest(data, websocket)
+                        response = await self.requestHandler.handleLoginRequest(data, websocket)
+                        if response['success'] == False:
+                            continue
+                        userID = response['userID']
+                        self.authorised_clients[userID] = websocket
+                        self.authorised_socketIDS[websocket] = userID
+                        self.authorised_sockets.add(websocket)    
+                    elif requestType == "USER_ADD_FRIEND":
+                        await self.requestHandler.handleUserAddFriend(self.authorised_socketIDS[websocket], data, websocket)
+                    elif requestType == "USER_ACCEPT_REQUEST":
+                        await self.requestHandler.handleUserAcceptRequest(self.authorised_socketIDS[websocket], data, websocket)
+                    elif requestType == "USER_DENY_REQUEST":
+                        await self.requestHandler.handleUserDenyRequest(self.authorised_socketIDS[websocket], data, websocket)
+                    elif requestType == "USER_REMOVE_FRIEND":
+                        await self.requestHandler.handleUserRemoveFriend(self.authorised_socketIDS[websocket], data, websocket)
                     else:
                         print(requestType)
         except websockets.ConnectionClosed:

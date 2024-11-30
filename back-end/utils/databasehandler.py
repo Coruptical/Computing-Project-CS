@@ -33,9 +33,68 @@ class DatabaseHandler:
         except: 
             return False
         
-    # TODO: Write about the error this caused, how the try/except caused it to get lost and how I had to manually look for it and use decode instead.
     def fetchPasswordAndSalt(self, username: str) -> tuple[bytes, bytes]:
         cursor = self.getDatabase().cursor()
         cursor.execute(f'SELECT passwordSalt, password FROM users WHERE username=\"{username}\"')
         result = cursor.fetchone()
         return (result[0], result[1])
+    
+    def getUUID(self, username: str) -> str:
+        cursor = self.getDatabase().cursor()
+        try:
+            cursor.execute(f'SELECT userID FROM users WHERE username=\"{username}\"')
+            result = cursor.fetchone()
+            return result[0]
+        except:
+            return None
+        
+    def getFriends(self, userID: str) -> list[str]:
+        friends = []
+        cursor = self.getDatabase().cursor()
+        cursor.execute(f"SELECT friendID FROM friendship WHERE userID=\"{userID}\" AND connectionActive=TRUE")
+        result = cursor.fetchall()
+        for row in result:
+            friends.append(row[0])
+        return friends
+        
+    def createFriendConnection(self, userID: str, targetID: str) -> bool:
+        try:
+            cursor = self.getDatabase().cursor()
+            data = [(userID, targetID), (targetID, userID)]
+            stmt = "INSERT INTO friendship(userID, friendID) VALUES(%s, %s)"
+            cursor.executemany(stmt, data)
+            self.getDatabase().commit()
+            return True
+        except:
+            return False
+        
+    def removeFriendConnection(self, userID: str, targetID: str) -> bool:
+        cursor = self.getDatabase().cursor()
+        data = [(userID, targetID), (targetID, userID)]
+        stmt = "UPDATE friendship SET connectionActive=0 WHERE connectionActive=1 AND userID=%s AND friendID=%s"
+        cursor.executemany(stmt, data)
+        self.getDatabase().commit()
+        return True
+        
+    def setFriendRequestInactive(self, recipientID: str, senderID: str) -> bool:
+        try:
+            cursor = self.getDatabase().cursor()
+            cursor.execute(f"UPDATE friend_request SET isActive=0 WHERE isActive=1 AND recipient_id=\"{recipientID}\" AND sender_id=\"{senderID}\"")
+            self.getDatabase().commit()
+            return True
+        except:
+            return False
+        
+    def createFriendRequest(self, userID: str, targetID: str) -> bool:
+        cursor = self.getDatabase().cursor()
+        cursor.execute(f"INSERT INTO friend_request(recipient_id, sender_id) VALUES(\"{targetID}\", \"{userID}\")")
+        self.getDatabase().commit()
+        
+    def checkFriendRequest(self, userID: str, targetID: str) -> bool:
+        cursor = self.getDatabase().cursor()
+        cursor.execute(f"SELECT id FROM friend_request WHERE recipient_id=\"{targetID}\" AND sender_id=\"{userID}\" AND isActive=TRUE")
+        
+        result = cursor.fetchall()
+        for x in result:
+            return True
+        return False
