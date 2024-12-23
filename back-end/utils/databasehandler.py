@@ -48,6 +48,15 @@ class DatabaseHandler:
         except:
             return None
         
+    def getUsername(self, userID: str) -> str:
+        cursor = self.getDatabase().cursor()
+        try:
+            cursor.execute(f'SELECT username FROM users WHERE userID=\"{userID}\"')
+            result = cursor.fetchone()
+            return result[0]
+        except:
+            return None
+        
     def getFriends(self, userID: str) -> list[str]:
         friends = []
         cursor = self.getDatabase().cursor()
@@ -98,3 +107,20 @@ class DatabaseHandler:
         for x in result:
             return True
         return False
+    
+    def createMessage(self, userID: str, recipientID: str, message: str) -> bool:
+        try:
+            cursor = self.getDatabase().cursor()
+            cursor.execute(f"INSERT INTO message(sender_id, body) VALUES(\"{userID}\", \"{message}\")")
+            self.getDatabase().commit()
+            
+            cursor.execute(f"SELECT id FROM message WHERE sender_id=\"{userID}\"")
+            result = cursor.fetchone()
+            
+            message_id = result[0]
+            cursor.execute(f"INSERT INTO message_recipient(recipient_id, message_id, is_read)VALUES(\"{recipientID}\", \"{message_id}\", FALSE)")
+            self.getDatabase().commit()
+            return True
+        except:
+            return False
+        

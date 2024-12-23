@@ -25,6 +25,14 @@ class WebsocketServer:
     def __init__(self, requestHandler: RequestHandler):
         self.requestHandler = requestHandler
 
+    def removeActiveSocket(self, websocket):
+        self.active_clients.remove(websocket)
+        userid = self.authorised_socketIDS[websocket]
+        self.authorised_sockets.remove(websocket)
+        self.authorised_clients.pop(userid)
+        self.authorised_socketIDS.pop(websocket)
+        print("WebSocket disconnected")        
+
     # This method is called when a websocket is connected to the server.
     async def handle_websocket(self, websocket: WebSocketServerProtocol, path):
         print("WebSocket connected")
@@ -32,7 +40,13 @@ class WebsocketServer:
         try:
             while True:
                 async for message in websocket:
-                    data = json.loads(message)
+                    data: dict = {}
+                    
+                    try:
+                        data = json.loads(message)
+                    except:
+                        continue
+                    
                     requestType = None
                     try:
                         requestType = data['requestType']
@@ -63,11 +77,23 @@ class WebsocketServer:
                         await self.requestHandler.handleUserDenyRequest(self.authorised_socketIDS[websocket], data, websocket)
                     elif requestType == "USER_REMOVE_FRIEND":
                         await self.requestHandler.handleUserRemoveFriend(self.authorised_socketIDS[websocket], data, websocket)
+                    elif requestType == "USER_MESSAGE":
+                        await self.requestHandler.handleUserMessage(self.authorised_socketIDS[websocket], data, websocket,
+                                                                    self.authorised_clients)
+                    elif requestType == "DISCONNECT":
+                        userID = self.authorised_socketIDS[websocket]
+                        if userID == None:
+                            self.active_clients.remove(websocket)
+                            websocket.close()
+                            return
+                        
+                        self.removeActiveSocket(websocket)
+                        await websocket.close()
+                        return
                     else:
                         print(requestType)
         except websockets.ConnectionClosed:
-            self.active_clients.remove(websocket)
-            print("WebSocket disconnected")
+            self.removeActiveSocket(websocket)
         
     # Creates a new loop to handle_websocket method to process new incoming connections.
     def websocket_caller(self):

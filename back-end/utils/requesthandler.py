@@ -143,3 +143,47 @@ class RequestHandler:
         success = self._databaseHandler.setFriendRequestInactive(userID, targetID)
         if success:
             await websocket.send(json.dumps({'response': 'FRIEND_REQUEST_DENIED'}))
+            
+    async def handleUserMessage(self, userID: str, data: dict, websocket: WebSocketServerProtocol, connected_sockets: dict[str: WebSocketServerProtocol]):
+        print(userID)
+        print(data)
+        targetUsername = data['targetUsername']
+        
+        usernameTargetExists = self._databaseHandler.userExists(targetUsername)
+        if not usernameTargetExists:
+            await websocket.send(json.dumps({'error': 'USERNAME_TARGET_NOT_EXIST'}))
+            return
+        
+        targetID = self._databaseHandler.getUUID(targetUsername)
+        targetSocket: WebSocketServerProtocol = None
+        
+        try:
+            targetSocket = connected_sockets[targetID]
+        except:
+            pass
+        
+        print(targetSocket)
+        if targetSocket == None:
+            print(targetUsername, "is not online.")
+            # TODO: Send this to the database for when this user is not online.
+            
+            message_created = self._databaseHandler.createMessage(userID, targetID, data['message'])
+            print(message_created)
+            return
+        
+        target_data = {
+            'server_request': 'USER_MESSAGE',
+            'userID': userID,
+            'username': self._databaseHandler.getUsername(userID),
+            'user_message': data['message']
+        }
+               
+        await targetSocket.send(json.dumps(target_data))
+        
+        # Even though we sent them the data, we still need to create the record in the database. 
+        # later, we have to check if this message is in the currently active chat, to determine whether the messages
+        # have been read or not.
+        message_created = self._databaseHandler.createMessage(userID, targetID, data['message'])
+        if not message_created:
+            print("Error while creating message.")
+        
