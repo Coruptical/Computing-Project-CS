@@ -31,7 +31,6 @@ class WebsocketServer:
         self.authorised_sockets.remove(websocket)
         self.authorised_clients.pop(userid)
         self.authorised_socketIDS.pop(websocket)
-        print("WebSocket disconnected")        
 
     # This method is called when a websocket is connected to the server.
     async def handle_websocket(self, websocket: WebSocketServerProtocol, path):
@@ -81,14 +80,20 @@ class WebsocketServer:
                         await self.requestHandler.handleUserMessage(self.authorised_socketIDS[websocket], data, websocket,
                                                                     self.authorised_clients)
                     elif requestType == "DISCONNECT":
-                        userID = self.authorised_socketIDS[websocket]
+                        userID = None
+                        try:
+                            userID = self.authorised_socketIDS[websocket]
+                        except:
+                            pass
                         if userID == None:
                             self.active_clients.remove(websocket)
-                            websocket.close()
+                            await websocket.close()
+                            print("WebSocket disconnected")
                             return
                         
                         self.removeActiveSocket(websocket)
                         await websocket.close()
+                        print("WebSocket disconnected")
                         return
                     else:
                         print(requestType)
@@ -99,7 +104,7 @@ class WebsocketServer:
     def websocket_caller(self):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        server = websockets.serve(self.handle_websocket, '127.0.0.1', 8080)
+        server = websockets.serve(self.handle_websocket, '0.0.0.0', 8080)
         loop.run_until_complete(server)
         loop.run_forever()
         
