@@ -50,8 +50,10 @@ class RequestHandler:
             if uuid != None:
                 response["userID"] = uuid 
                 response["success"] = True
+            await websocket.send(json.dumps({'response': 'LOGIN_SUCCESS'}))
         else:
             print("Password doesn't match")
+            await websocket.send(json.dumps({'error': 'PASSWORD_INCORRECT'}))
         
         return response
             
