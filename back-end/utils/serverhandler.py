@@ -104,7 +104,7 @@ class WebsocketServer:
     def websocket_caller(self):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        server = websockets.serve(self.handle_websocket, '0.0.0.0', 8080)
+        server = websockets.serve(self.handle_websocket, '10.14.32.106', 8080)
         loop.run_until_complete(server)
         loop.run_forever()
         

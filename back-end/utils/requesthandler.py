@@ -13,48 +13,61 @@ class RequestHandler:
         username = data['username']
         password = data['password']
         
-        usernameExists = self._databaseHandler.userExists(username)
-        if usernameExists:
-            await websocket.send(json.dumps({'error': 'USERNAME_EXISTS'}))
-            return
+        socket_response = {
+            'responseSuccess': False,
+            'request': data['requestType'],
+            'message': ''
+        }
         
         salt = cutils.new_salt()
         password_hash = cutils.hash_password(salt, password)
-        created = self._databaseHandler.createUser(username, cutils.encode64(salt), password_hash)
         
-        if created:
-            await websocket.send(json.dumps({'response': 'SUCCESS'}))
+        usernameExists = self._databaseHandler.userExists(username)
+        if usernameExists:
+            socket_response['message'] = 'USERNAME_EXISTS'
         else:
-            await websocket.send(json.dumps({'error': 'FAILED'}))
+            created = self._databaseHandler.createUser(username, cutils.encode64(salt), password_hash)
+            if created: 
+                socket_response['responseSuccess'] = True
+            else:
+                socket_response['message'] = 'UNKNOWN_FAILED'
+        
+        await websocket.send(json.dumps(socket_response))
         
     async def handleLoginRequest(self, data: dict, websocket: WebSocketServerProtocol) -> dict:
         username = data['username']
         password = data['password']
-        print(password)
+        print(data)
         
         response = {
             "success": False,
             "userID": ""
         }
         
+        socket_response = {
+            'responseSuccess': False,
+            'request': data['requestType'],
+            'message': ''
+        }
+        
         usernameExists = self._databaseHandler.userExists(username)
         if not usernameExists:
-            await websocket.send(json.dumps({'error': 'USERNAME_NOT_EXIST'}))
-            return response
-        
-        salt, passwordHash = self._databaseHandler.fetchPasswordAndSalt(username)
-        passwordMatches = cutils.check_password(cutils.decode64(salt), passwordHash, password)
-        if passwordMatches:
-            print("Your password matches.")
-            uuid = self._databaseHandler.getUUID(username)
-            if uuid != None:
-                response["userID"] = uuid 
-                response["success"] = True
-            await websocket.send(json.dumps({'response': 'LOGIN_SUCCESS'}))
+            socket_response['message'] = 'USERNAME_NOT_EXIST'
         else:
-            print("Password doesn't match")
-            await websocket.send(json.dumps({'error': 'PASSWORD_INCORRECT'}))
+            salt, passwordHash = self._databaseHandler.fetchPasswordAndSalt(username)
+            passwordMatches = cutils.check_password(cutils.decode64(salt), passwordHash, password)
+            if passwordMatches:
+                print(f"{username}'s password matches.")
+                uuid = self._databaseHandler.getUUID(username)
+                if uuid != None:
+                    response["userID"] = uuid 
+                    response["success"] = True
+                socket_response['responseSuccess'] = True
+            else:
+                print(f"{username}'s password doesn't match")
+                socket_response['message'] = 'PASSWORD_INCORRECT'
         
+        await websocket.send(json.dumps(socket_response))
         return response
             
     async def handleUserAddFriend(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
