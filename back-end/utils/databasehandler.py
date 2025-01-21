@@ -65,6 +65,19 @@ class DatabaseHandler:
         for row in result:
             friends.append(row[0])
         return friends
+    
+    def getFriendList(self, userID: str) -> list[str]:
+        friends = []
+        cursor = self.getDatabase().cursor()
+        stmt = f"""
+        SELECT users.username
+        FROM users
+        JOIN friendship ON users.userID=friendship.friendID WHERE friendship.userID=\"{userID}\" AND friendship.connectionActive=TRUE
+        """
+        cursor.execute(stmt)
+        for x in cursor:
+            friends.append(x[0])
+        return friends
         
     def createFriendConnection(self, userID: str, targetID: str) -> bool:
         try:

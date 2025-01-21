@@ -87,18 +87,26 @@ class WebsocketServer:
                             pass
                         if userID == None:
                             self.active_clients.remove(websocket)
-                            await websocket.close()
-                            print("WebSocket disconnected")
-                            return
-                        
-                        self.removeActiveSocket(websocket)
+                        else:       
+                            self.removeActiveSocket(websocket)
                         await websocket.close()
                         print("WebSocket disconnected")
                         return
+                    elif requestType == "GET_FRIEND_LIST":
+                        await self.requestHandler.handleGetFriendList(self.authorised_socketIDS[websocket], data, websocket)
                     else:
                         print(requestType)
         except websockets.ConnectionClosed:
-            self.removeActiveSocket(websocket)
+            userID = None
+            try:
+                userID = self.authorised_socketIDS[websocket]
+            except:
+                pass
+            if userID == None:
+                self.active_clients.remove(websocket)
+            else:
+                self.removeActiveSocket(websocket)
+            print("WebSocket connection closed")
         
     # Creates a new loop to handle_websocket method to process new incoming connections.
     def websocket_caller(self):

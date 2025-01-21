@@ -13,6 +13,8 @@ def main():
     websock_server = WebsocketServer(requestHandler=RequestHandler(databaseHandler))
     websock_server.start()
     
+    databaseHandler.getFriendList("f6d60636-456f-4466-b1d7-7f5a93001a05")
+    
     m = ""
     while m != "!":
         m = input()

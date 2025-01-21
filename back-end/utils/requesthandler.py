@@ -43,13 +43,11 @@ class RequestHandler:
             "success": False,
             "userID": ""
         }
-        
         socket_response = {
             'responseSuccess': False,
             'request': data['requestType'],
             'message': ''
         }
-        
         usernameExists = self._databaseHandler.userExists(username)
         if not usernameExists:
             socket_response['message'] = 'USERNAME_NOT_EXIST'
@@ -202,3 +200,17 @@ class RequestHandler:
         if not message_created:
             print("Error while creating message.")
         
+    async def handleGetFriendList(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
+        friends = self._databaseHandler.getFriendList(userID)
+        
+        socket_response = {
+            'responseSuccess': False,
+            'request': data['requestType'],
+            'message': ''
+        }
+        
+        if friends != None:
+            socket_response['responseSuccess'] = True
+            
+        socket_response['message'] = friends
+        await websocket.send(json.dumps(socket_response))
