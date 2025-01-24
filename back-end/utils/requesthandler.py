@@ -73,23 +73,36 @@ class RequestHandler:
         print(data)
         targetUsername = data['targetUsername']
         
+        socket_response = {
+            'responseSuccess': False,
+            'request': data['requestType'],
+            'message': ''
+        }
+        
         usernameTargetExists = self._databaseHandler.userExists(targetUsername)
         if not usernameTargetExists:
-            await websocket.send(json.dumps({'error': 'USERNAME_TARGET_NOT_EXIST'}))
+            socket_response['message'] = 'USERNAME_NOT_EXISTS'
+            await websocket.send(json.dumps(socket_response))
             return
         
         targetID = self._databaseHandler.getUUID(targetUsername)
         friends = self._databaseHandler.getFriends(userID)
         print(friends)
         if targetID in friends:
-            await websocket.send(json.dumps({'error': 'FRIEND_CONNECTION_EXISTS'}))
+            socket_response['message'] = 'FRIEND_CONNECTION_EXISTS'
+            await websocket.send(json.dumps(socket_response))
             return
         
         requestActive = self._databaseHandler.checkFriendRequest(userID, targetID)
         if requestActive:
-            await websocket.send(json.dumps({'error': 'FRIEND_REQUEST_EXISTS'}))
+            socket_response['message'] = 'FRIEND_REQUEST_EXISTS'
+            await websocket.send(json.dumps(socket_response))
             return
-        self._databaseHandler.createFriendRequest(userID, targetID)   
+        
+        socket_response['responseSuccess'] = True
+        self._databaseHandler.createFriendRequest(userID, targetID)
+        await websocket.send(json.dumps(socket_response))
+        
         
     async def handleUserRemoveFriend(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
         print(userID)
