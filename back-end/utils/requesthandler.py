@@ -202,6 +202,7 @@ class RequestHandler:
         
     async def handleGetFriendList(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
         friends = self._databaseHandler.getFriendList(userID)
+    
         
         socket_response = {
             'responseSuccess': False,
@@ -212,5 +213,5 @@ class RequestHandler:
         if friends != None:
             socket_response['responseSuccess'] = True
             
-        socket_response['message'] = friends
+        socket_response['message'] = json.dumps(friends)
         await websocket.send(json.dumps(socket_response))
