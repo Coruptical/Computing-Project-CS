@@ -36,7 +36,7 @@ class WebsocketServer:
         self.authorised_socketIDS.pop(websocket)
 
     # This method is called when a websocket is connected to the server.
-    async def handle_websocket(self, websocket: WebSocketServerProtocol, path):
+    async def handle_websocket(self, websocket: WebSocketServerProtocol):
         print("WebSocket connected")
         self.active_clients.add(websocket)
         try:
@@ -121,8 +121,11 @@ class WebsocketServer:
     def websocket_caller(self):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        server = websockets.serve(self.handle_websocket, self.server_address, 8080)
-        loop.run_until_complete(server)
+
+        async def start_server():
+            server = await websockets.serve(self.handle_websocket, self.server_address, 8080)
+            return server
+        server = loop.run_until_complete(start_server())
         loop.run_forever()
         
     # Run WebSocket server in new thread.

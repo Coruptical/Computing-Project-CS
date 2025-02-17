@@ -6,7 +6,7 @@ DATABASE_NAME = "csproject_database"
 DATABASE_USERNAME = "csuser"
 DATABASE_PASSWORD = "user5682#"
 
-SERVER_ADDRESS = '10.14.32.106'
+SERVER_ADDRESS = '192.168.0.6'
 
 def main():
     databaseHandler = DatabaseHandler('127.0.0.1', user=DATABASE_USERNAME, password=DATABASE_PASSWORD)
