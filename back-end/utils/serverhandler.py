@@ -14,6 +14,8 @@ class WebsocketServer:
     authorised_socketIDS: dict[WebSocketServerProtocol: str] = {}
     authorised_sockets: set[WebSocketServerProtocol] = set()
     
+    user_chats_open: dict[str: str] = {}
+    
     AUTHORISED_REQUESTS = ["USER_ADD_FRIEND",
                            "USER_REMOVE_FRIEND",
                            "USER_MESSAGE",
@@ -22,8 +24,9 @@ class WebsocketServer:
     
     requestHandler: RequestHandler = None
     
-    def __init__(self, requestHandler: RequestHandler):
+    def __init__(self, requestHandler: RequestHandler, server_address: str):
         self.requestHandler = requestHandler
+        self.server_address = server_address
 
     def removeActiveSocket(self, websocket):
         self.active_clients.remove(websocket)
@@ -94,6 +97,12 @@ class WebsocketServer:
                         return
                     elif requestType == "GET_FRIEND_LIST":
                         await self.requestHandler.handleGetFriendList(self.authorised_socketIDS[websocket], data, websocket)
+                    elif requestType == "GET_FRIEND_REQUESTS":
+                        await self.requestHandler.handleGetFriendRequests(self.authorised_socketIDS[websocket], data, websocket)
+                    elif requestType == "USER_CHAT_OPEN":
+                        response = await self.requestHandler.handleUserChatOpen(self.authorised_socketIDS[websocket], data, websocket)
+                    elif requestType == "GET_MESSAGES":
+                        await self.requestHandler.handleGetMessages(self.authorised_socketIDS[websocket], data, websocket)
                     else:
                         print(requestType)
         except websockets.ConnectionClosed:
@@ -112,7 +121,7 @@ class WebsocketServer:
     def websocket_caller(self):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        server = websockets.serve(self.handle_websocket, '10.14.32.106', 8080)
+        server = websockets.serve(self.handle_websocket, self.server_address, 8080)
         loop.run_until_complete(server)
         loop.run_forever()
         

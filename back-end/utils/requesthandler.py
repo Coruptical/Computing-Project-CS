@@ -2,6 +2,7 @@ import utils.classutils as cutils
 from utils.databasehandler import DatabaseHandler
 import json
 from websockets.legacy.server import WebSocketServerProtocol
+from models.message import Message
 
 class RequestHandler:
     _databaseHandler: DatabaseHandler = None
@@ -99,119 +100,137 @@ class RequestHandler:
             await websocket.send(json.dumps(socket_response))
             return
         
+        requestActive = self._databaseHandler.checkFriendRequest(targetID, userID)
+        if requestActive:
+            socket_response['message'] = 'FRIEND_REQUEST_EXISTS'
+            await websocket.send(json.dumps(socket_response))
+            return
+        
         socket_response['responseSuccess'] = True
         self._databaseHandler.createFriendRequest(userID, targetID)
         await websocket.send(json.dumps(socket_response))
         
         
     async def handleUserRemoveFriend(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
-        print(userID)
-        print(data)
         targetUsername = data['targetUsername']
+        
+        socket_response = {
+            'responseSuccess': False,
+            'request': data['requestType'],
+            'message': ''
+        }
         
         usernameTargetExists = self._databaseHandler.userExists(targetUsername)
         if not usernameTargetExists:
-            await websocket.send(json.dumps({'error': 'USERNAME_TARGET_NOT_EXIST'}))
+            socket_response['message'] = "USERNAME_TARGET_NOT_EXIST"
+            await websocket.send(json.dumps(socket_response))
             return
         
         targetID = self._databaseHandler.getUUID(targetUsername)
         friends = self._databaseHandler.getFriends(userID)
-        print(friends)
         if targetID not in friends:
-            await websocket.send(json.dumps({'error': 'FRIEND_CONNECTION_NOT_EXISTS'}))
+            socket_response['message'] = "FRIEND_CONNECTION_NOT_EXISTS"
+            await websocket.send(socket_response)
             return
         
         success = self._databaseHandler.removeFriendConnection(userID, targetID)
         if success:
-            await websocket.send(json.dumps({'response': 'FRIEND_CONNECTION_REMOVED'}))
+            socket_response['responseSuccess'] = True
+        
+        await websocket.send(json.dumps(socket_response))
     
     async def handleUserAcceptRequest(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
         print(userID)
         print(data)
         targetUsername = data['targetUsername']
         
+        socket_response = {
+            'responseSuccess': False,
+            'request': data['requestType'],
+            'message': ''
+        }
+        
         usernameTargetExists = self._databaseHandler.userExists(targetUsername)
         if not usernameTargetExists:
-            await websocket.send(json.dumps({'error': 'USERNAME_TARGET_NOT_EXIST'}))
-            return
-        
-        targetID = self._databaseHandler.getUUID(targetUsername)
-        friends = self._databaseHandler.getFriends(userID)
-        print(friends)
-        if targetID in friends:
-            await websocket.send(json.dumps({'error': 'FRIEND_CONNECTION_EXISTS'}))
-            return
+            socket_response['message']= "USERNAME_TARGET_NOT_EXIST"
+        else:
+            targetID = self._databaseHandler.getUUID(targetUsername)
+            friends = self._databaseHandler.getFriends(userID)
+            if targetID in friends:
+                socket_response['message']= 'FRIEND_CONNECTION_EXISTS'
+                await websocket.send(json.dumps(socket_response))
         
         success = self._databaseHandler.createFriendConnection(userID, targetID)
         if success:
             print("Friendship created.")
+            socket_response['responseSuccess'] = True
+        
         self._databaseHandler.setFriendRequestInactive(userID, targetID)
-        await websocket.send(json.dumps({'response': 'FRIEND_REQUEST_ACCEPTED'}))
+        await websocket.send(json.dumps(socket_response))
     
     async def handleUserDenyRequest(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
         print(userID)
         print(data)
         targetUsername = data['targetUsername']
         
+        socket_response = {
+            'responseSuccess': False,
+            'request': data['requestType'],
+            'message': ''
+        }        
+        
+        
         usernameTargetExists = self._databaseHandler.userExists(targetUsername)
         if not usernameTargetExists:
-            await websocket.send(json.dumps({'error': 'USERNAME_TARGET_NOT_EXIST'}))
-            return
-        
-        targetID = self._databaseHandler.getUUID(targetUsername)
-        friends = self._databaseHandler.getFriends(userID)
-        print(friends)
-        if targetID in friends:
-            await websocket.send(json.dumps({'error': 'FRIEND_CONNECTION_EXISTS'}))
-            return
-        
-        
+            socket_response['message']= "USERNAME_TARGET_NOT_EXIST"
+        else:
+            targetID = self._databaseHandler.getUUID(targetUsername)
+            friends = self._databaseHandler.getFriends(userID)
+            if targetID in friends:
+                socket_response['message']= 'FRIEND_CONNECTION_EXISTS'
+                await websocket.send(json.dumps(socket_response))
+                
         success = self._databaseHandler.setFriendRequestInactive(userID, targetID)
         if success:
-            await websocket.send(json.dumps({'response': 'FRIEND_REQUEST_DENIED'}))
+            socket_response['responseSuccess'] = True
             
+        await websocket.send(json.dumps(socket_response))
+    
+    # TODO: Send response to tell user that the target user isn't friends with them.
     async def handleUserMessage(self, userID: str, data: dict, websocket: WebSocketServerProtocol, connected_sockets: dict[str: WebSocketServerProtocol]):
         print(userID)
         print(data)
         targetUsername = data['targetUsername']
         
+        socket_response = {
+            'responseSuccess': False,
+            'request': data['requestType'],
+            'message': ''
+        }           
+        
+        targetSocket: WebSocketServerProtocol = None
+        targetID = None
+        
         usernameTargetExists = self._databaseHandler.userExists(targetUsername)
         if not usernameTargetExists:
-            await websocket.send(json.dumps({'error': 'USERNAME_TARGET_NOT_EXIST'}))
-            return
+            socket_response['message']= 'USERNAME_TARGET_NOT_EXIST'
+        else:
+            targetID = self._databaseHandler.getUUID(targetUsername)
         
-        targetID = self._databaseHandler.getUUID(targetUsername)
-        targetSocket: WebSocketServerProtocol = None
-        
-        try:
-            targetSocket = connected_sockets[targetID]
-        except:
-            pass
-        
-        print(targetSocket)
-        if targetSocket == None:
-            print(targetUsername, "is not online.")
-            # TODO: Send this to the database for when this user is not online.
+            try:
+                targetSocket = connected_sockets[targetID]
             
+            except:
+                pass
+        
             message_created = self._databaseHandler.createMessage(userID, targetID, data['message'])
-            print(message_created)
-            return
+            if not message_created:
+                print("Error while creating message.")
+                socket_response['message'] = 'ERROR_CREATING_MESSAGE'
+            else:
+                socket_response['responseSuccess'] = True
         
-        target_data = {
-            'server_request': 'USER_MESSAGE',
-            'userID': userID,
-            'username': self._databaseHandler.getUsername(userID),
-            'user_message': data['message']
-        }
-               
-        await targetSocket.send(json.dumps(target_data))
-        
-        # Even though we sent them the data, we still need to create the record in the database. 
-        # later, we have to check if this message is in the currently active chat, to determine whether the messages
-        # have been read or not.
-        message_created = self._databaseHandler.createMessage(userID, targetID, data['message'])
-        if not message_created:
-            print("Error while creating message.")
+        await websocket.send(json.dumps(socket_response))
         
     async def handleGetFriendList(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
         friends = self._databaseHandler.getFriendList(userID)
@@ -225,6 +244,42 @@ class RequestHandler:
         
         if friends != None:
             socket_response['responseSuccess'] = True
+            socket_response['message'] = json.dumps(friends)
             
-        socket_response['message'] = json.dumps(friends)
         await websocket.send(json.dumps(socket_response))
+        
+    async def handleGetFriendRequests(self, userID: str, data:dict, websocket: WebSocketServerProtocol):
+        socket_response = {
+            'responseSuccess': False,
+            'request': data['requestType'],
+            'message': ''
+        } 
+        
+        requests = self._databaseHandler.getFriendRequests(userID)
+        
+        if requests != None:
+            socket_response['responseSuccess'] = True
+            socket_response['message'] = json.dumps(requests)
+        
+        await websocket.send(json.dumps(socket_response))
+        
+    async def handleGetMessages(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
+        page = data['page']
+        friendName = data['friendName']
+        
+        socket_response = {
+            'responseSuccess': False,
+            'request': data['requestType'],
+            'message': ''
+        }
+        
+        messages: list[Message] = self._databaseHandler.getUserMessages(userID, friendName, page)
+        
+        if messages != None:
+            socket_response['responseSuccess'] = True
+            socket_response['message'] = json.dumps(messages, default=lambda x: x.__dict__)
+            
+        await websocket.send(json.dumps(socket_response))
+    
+    async def handleUserChatOpen(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
+        pass

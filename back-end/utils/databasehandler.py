@@ -1,6 +1,7 @@
 import mysql.connector as mysql
 from mysql.connector import MySQLConnection
 import uuid
+from models.message import Message
 
 class DatabaseHandler:
     _database: MySQLConnection = None
@@ -78,6 +79,19 @@ class DatabaseHandler:
         for x in cursor:
             friends.append(x[0])
         return friends
+    
+    def getFriendRequests(self, userID: str) -> list[str]:
+        requests = []
+        cursor = self.getDatabase().cursor()
+        stmt = f"""
+        SELECT users.username
+        FROM users
+        JOIN friend_request ON users.userID=friend_request.sender_id WHERE recipient_id=\"{userID}\" AND friend_request.isActive=TRUE
+        """
+        cursor.execute(stmt)
+        for x in cursor:
+            requests.append(x[0])
+        return requests
         
     def createFriendConnection(self, userID: str, targetID: str) -> bool:
         try:
@@ -127,13 +141,43 @@ class DatabaseHandler:
             cursor.execute(f"INSERT INTO message(sender_id, body) VALUES(\"{userID}\", \"{message}\")")
             self.getDatabase().commit()
             
-            cursor.execute(f"SELECT id FROM message WHERE sender_id=\"{userID}\"")
+            cursor.execute(f"SELECT LAST_INSERT_ID()")
             result = cursor.fetchone()
             
             message_id = result[0]
-            cursor.execute(f"INSERT INTO message_recipient(recipient_id, message_id, is_read)VALUES(\"{recipientID}\", \"{message_id}\", FALSE)")
+            cursor.execute(f"INSERT INTO message_recipient(recipient_id, message_id, is_read) VALUES(\"{recipientID}\", \"{message_id}\", FALSE)")
             self.getDatabase().commit()
             return True
         except:
             return False
         
+    def getUserMessages(self, userID: str, friendName: str, page: int) -> list[Message]:
+        try: 
+            friendID = self.getUUID(friendName)
+            cursor = self.getDatabase().cursor()
+            
+            messages: list[Message] = []
+        
+            stmt = f"""
+SELECT users.username, message.body, message.timestamp
+FROM message
+JOIN message_recipient ON message.id=message_recipient.message_id
+JOIN users ON message.sender_id=users.userID
+WHERE (message.sender_id=\"{userID}\" AND message_recipient.recipient_id=\"{friendID}\")
+OR (message.sender_id=\"{friendID}\" AND message_recipient.recipient_id=\"{userID}\")
+ORDER BY message.timestamp
+LIMIT {page*50},{(page+1)*50}
+            """
+            cursor.execute(stmt)
+            for row in cursor:
+                username = row[0]
+                body = row[1]
+                timestamp = str(row[2])
+                
+                
+                print(username, body, timestamp)
+                messages.append(Message(username, body, timestamp))
+                
+            return messages
+        except:
+            return None
