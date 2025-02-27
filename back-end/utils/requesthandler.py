@@ -216,19 +216,32 @@ class RequestHandler:
             socket_response['message']= 'USERNAME_TARGET_NOT_EXIST'
         else:
             targetID = self._databaseHandler.getUUID(targetUsername)
-        
-            try:
-                targetSocket = connected_sockets[targetID]
             
-            except:
-                pass
-        
             message_created = self._databaseHandler.createMessage(userID, targetID, data['message'])
             if not message_created:
                 print("Error while creating message.")
                 socket_response['message'] = 'ERROR_CREATING_MESSAGE'
             else:
                 socket_response['responseSuccess'] = True
+            
+            try:
+                targetSocket = connected_sockets[targetID]
+                print("Target socket online")
+                
+                # Set up data to send to target user
+                targetMessage = self._databaseHandler.getLastMessage(userID, targetID)
+
+                target_data = {
+                    'responseSuccess': True,
+                    'request': 'INCOMING_MESSAGE',
+                    'message': json.dumps(targetMessage, default=lambda x: x.__dict__)  
+                }
+                
+                await targetSocket.send(json.dumps(target_data))
+            except:
+                pass
+                print("Target socket offline")
+                
         
         await websocket.send(json.dumps(socket_response))
         

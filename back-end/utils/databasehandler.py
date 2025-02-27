@@ -181,3 +181,33 @@ LIMIT {page*50},{(page+1)*50}
             return messages
         except:
             return None
+        
+    def getLastMessage(self, userID: str, targetID: str) -> Message:
+        try: 
+            cursor = self.getDatabase().cursor()
+            
+            message: Message = None
+        
+            stmt = f"""
+SELECT users.username, message.body, message.timestamp
+FROM message
+JOIN message_recipient ON message.id=message_recipient.message_id
+JOIN users ON message.sender_id=users.userID
+WHERE (message.sender_id=\"{userID}\" AND message_recipient.recipient_id=\"{targetID}\")
+ORDER BY message.timestamp DESC
+LIMIT 1
+            """
+            cursor.execute(stmt)
+            for row in cursor:
+                username = row[0]
+                body = row[1]
+                timestamp = str(row[2])
+                
+                
+                print(username, body, timestamp)
+                message = Message(username, body, timestamp)
+                break
+                
+            return message
+        except:
+            return None
