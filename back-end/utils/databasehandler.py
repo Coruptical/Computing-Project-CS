@@ -1,160 +1,316 @@
 import mysql.connector as mysql
 from mysql.connector import MySQLConnection
+from mysql.connector.pooling import PooledMySQLConnection
 import uuid
 from models.message import Message
 
 class DatabaseHandler:
     _database: MySQLConnection = None
     
-    def __init__(self, host: str, user: str, password: str):
-        self._database = mysql.connect(host=host, user=user, password=password)
+    def __init__(self, host: str, user: str, password: str, database: str, pool_size=16):
+        """Initialize database connection pool."""
+        self.db_config = {
+            "host": host,
+            "user": user,
+            "password": password,
+            "database": database
+        }
         
-    def getDatabase(self) -> MySQLConnection:
-        return self._database
+        self.connection_pool = mysql.pooling.MySQLConnectionPool(
+            pool_name="csproject_pool",
+            pool_size=pool_size,
+            **self.db_config
+        )
     
-    def setDatabase(self, database: str) -> None:
-        self.getDatabase().cursor().execute(f"USE {database}")
+    def get_connection(self) -> MySQLConnection:
+        """Retrieve a connection from the pool."""
+        try:
+            conn = self.connection_pool.get_connection()
+            if not conn.is_connected():
+                conn.reconnect(attempts=3, delay=1)
+            return conn
+        except mysql.Error as err:
+            print(f"Database connection error: {err}")
+            return None
+        
+    def close_connection(self, conn: MySQLConnection):
+        """Close (return) the connection to the pool."""
+        if conn and conn.is_connected():
+            conn.close()
+        
+    # def getDatabase(self) -> MySQLConnection:
+    #     return self._database
+    
+    # def setDatabase(self, database: str) -> None:
+    #     self.getDatabase().cursor().execute(f"USE {database}")
     
     def userExists(self, username: str) -> bool:
-        cursor = self.getDatabase().cursor()
-        cursor.execute(f"SELECT userID FROM users WHERE username=\"{username}\"")
+        conn = self.get_connection()
         
-        result = cursor.fetchall()
-        for x in result:
-            return True
-        return False
+        if conn == None:
+            return False
+        
+        
+        cursor = conn.cursor()
+        try:
+            cursor.execute(f"SELECT userID FROM users WHERE username=\"{username}\"")
+            
+            result = cursor.fetchall()
+            for x in result:
+                return True
+            return False
+        finally:
+            cursor.close()
+            self.close_connection(conn)
     
     def createUser(self, username: str, passwordSalt: str, password: str) -> bool:
-        cursor = self.getDatabase().cursor()
+        conn = self.get_connection()
+        
+        if conn == None:
+            return False
+        
+        cursor = conn.cursor()
         userID = uuid.uuid4()
         try:
             cursor.execute(f"INSERT INTO users VALUES (\"{userID}\", \"{username}\", \"{passwordSalt}\", \"{password}\")")
-            self.getDatabase().commit()
+            conn.commit()
             return True
         except: 
             return False
+        finally:
+            cursor.close()
+            self.close_connection(conn)
         
     def fetchPasswordAndSalt(self, username: str) -> tuple[bytes, bytes]:
-        cursor = self.getDatabase().cursor()
-        cursor.execute(f'SELECT passwordSalt, password FROM users WHERE username=\"{username}\"')
-        result = cursor.fetchone()
-        return (result[0], result[1])
-    
+        conn = self.get_connection()
+        
+        if conn == None:
+            return False
+        
+        cursor = conn.cursor()
+        try:
+            cursor.execute(f'SELECT passwordSalt, password FROM users WHERE username=\"{username}\"')
+            result = cursor.fetchone()
+            return (result[0], result[1])
+        finally:
+            cursor.close()
+            self.close_connection(conn)
+        
     def getUUID(self, username: str) -> str:
-        cursor = self.getDatabase().cursor()
+        conn = self.get_connection()
+        
+        if conn == None:
+            return None
+        
+        cursor = conn.cursor()
         try:
             cursor.execute(f'SELECT userID FROM users WHERE username=\"{username}\"')
             result = cursor.fetchone()
             return result[0]
         except:
             return None
+        finally:
+            cursor.close()
+            self.close_connection(conn)
         
     def getUsername(self, userID: str) -> str:
-        cursor = self.getDatabase().cursor()
+        conn = self.get_connection()
+        
+        if conn == None:
+            return None
+        
+        cursor = conn.cursor()
         try:
             cursor.execute(f'SELECT username FROM users WHERE userID=\"{userID}\"')
             result = cursor.fetchone()
             return result[0]
         except:
             return None
+        finally:
+            cursor.close()
+            self.close_connection(conn)
         
     def getFriends(self, userID: str) -> list[str]:
+        conn = self.get_connection()
+        
+        if conn == None:
+            return None        
+        
+        
         friends = []
-        cursor = self.getDatabase().cursor()
-        cursor.execute(f"SELECT friendID FROM friendship WHERE userID=\"{userID}\" AND connectionActive=TRUE")
-        result = cursor.fetchall()
-        for row in result:
-            friends.append(row[0])
-        return friends
+        cursor = conn.cursor()
+        try:
+            cursor.execute(f"SELECT friendID FROM friendship WHERE userID=\"{userID}\" AND connectionActive=TRUE")
+            result = cursor.fetchall()
+            for row in result:
+                friends.append(row[0])
+            return friends
+        finally:
+            cursor.close()
+            self.close_connection(conn)
     
     def getFriendList(self, userID: str) -> list[str]:
+        conn = self.get_connection()
+        
+        if conn == None:
+            return None
+        
         friends = []
-        cursor = self.getDatabase().cursor()
-        stmt = f"""
-        SELECT users.username
-        FROM users
-        JOIN friendship ON users.userID=friendship.friendID WHERE friendship.userID=\"{userID}\" AND friendship.connectionActive=TRUE
-        """
-        cursor.execute(stmt)
-        for x in cursor:
-            friends.append(x[0])
-        return friends
+        cursor =  conn.cursor()
+        try:
+            stmt = f"""
+            SELECT users.username
+            FROM users
+            JOIN friendship ON users.userID=friendship.friendID WHERE friendship.userID=\"{userID}\" AND friendship.connectionActive=TRUE
+            """
+            cursor.execute(stmt)
+            for x in cursor:
+                friends.append(x[0])
+            return friends
+        finally:
+            cursor.close()
+            self.close_connection(conn)
     
     def getFriendRequests(self, userID: str) -> list[str]:
-        requests = []
-        cursor = self.getDatabase().cursor()
-        stmt = f"""
-        SELECT users.username
-        FROM users
-        JOIN friend_request ON users.userID=friend_request.sender_id WHERE recipient_id=\"{userID}\" AND friend_request.isActive=TRUE
-        """
-        cursor.execute(stmt)
-        for x in cursor:
-            requests.append(x[0])
-        return requests
+        conn = self.get_connection()
         
-    def createFriendConnection(self, userID: str, targetID: str) -> bool:
+        if conn == None:
+            return None
+        
+        requests = []
+        cursor = conn.cursor()
         try:
-            cursor = self.getDatabase().cursor()
+            stmt = f"""
+            SELECT users.username
+            FROM users
+            JOIN friend_request ON users.userID=friend_request.sender_id WHERE recipient_id=\"{userID}\" AND friend_request.isActive=TRUE
+            """
+            cursor.execute(stmt)
+            for x in cursor:
+                requests.append(x[0])
+            return requests
+        finally:
+            cursor.close()
+            self.close_connection(conn)
+            
+    def createFriendConnection(self, userID: str, targetID: str) -> bool:
+        conn = self.get_connection()
+        
+        if conn == None:
+            return False        
+        
+        try:
+            cursor = conn.cursor()
             data = [(userID, targetID), (targetID, userID)]
             stmt = "INSERT INTO friendship(userID, friendID) VALUES(%s, %s)"
             cursor.executemany(stmt, data)
-            self.getDatabase().commit()
+            conn.commit()
             return True
         except:
             return False
+        finally:
+            cursor.close()
+            self.close_connection(conn)
         
     def removeFriendConnection(self, userID: str, targetID: str) -> bool:
-        cursor = self.getDatabase().cursor()
-        data = [(userID, targetID), (targetID, userID)]
-        stmt = "UPDATE friendship SET connectionActive=0 WHERE connectionActive=1 AND userID=%s AND friendID=%s"
-        cursor.executemany(stmt, data)
-        self.getDatabase().commit()
-        return True
+        conn = self.get_connection()
         
-    def setFriendRequestInactive(self, recipientID: str, senderID: str) -> bool:
+        if conn == None:
+            return False
+        
+        cursor = conn.cursor()
         try:
-            cursor = self.getDatabase().cursor()
+            data = [(userID, targetID), (targetID, userID)]
+            stmt = "UPDATE friendship SET connectionActive=0 WHERE connectionActive=1 AND userID=%s AND friendID=%s"
+            cursor.executemany(stmt, data)
+            conn.commit()
+            return True
+        finally:
+            cursor.close()
+            self.close_connection(conn)
+            
+    def setFriendRequestInactive(self, recipientID: str, senderID: str) -> bool:
+        conn = self.get_connection()
+        
+        if conn == None:
+            return False
+        
+        try:
+            cursor = conn.cursor()
             cursor.execute(f"UPDATE friend_request SET isActive=0 WHERE isActive=1 AND recipient_id=\"{recipientID}\" AND sender_id=\"{senderID}\"")
-            self.getDatabase().commit()
+            conn.commit()
             return True
         except:
             return False
-        
+        finally:
+            cursor.close()
+            self.close_connection(conn)
+            
     def createFriendRequest(self, userID: str, targetID: str) -> bool:
-        cursor = self.getDatabase().cursor()
-        cursor.execute(f"INSERT INTO friend_request(recipient_id, sender_id) VALUES(\"{targetID}\", \"{userID}\")")
-        self.getDatabase().commit()
+        conn = self.get_connection()
+        
+        if conn == None:
+            return False
+        
+        cursor = conn.cursor()
+        try:
+            cursor.execute(f"INSERT INTO friend_request(recipient_id, sender_id) VALUES(\"{targetID}\", \"{userID}\")")
+            conn.commit()
+        finally:
+            cursor.close()
+            self.close_connection(conn)
         
     def checkFriendRequest(self, userID: str, targetID: str) -> bool:
-        cursor = self.getDatabase().cursor()
-        cursor.execute(f"SELECT id FROM friend_request WHERE recipient_id=\"{targetID}\" AND sender_id=\"{userID}\" AND isActive=TRUE")
+        conn = self.get_connection()
         
-        result = cursor.fetchall()
-        for x in result:
-            return True
-        return False
+        if conn == None:
+            return False        
+        
+        cursor = conn.cursor()
+        try:
+            cursor.execute(f"SELECT id FROM friend_request WHERE recipient_id=\"{targetID}\" AND sender_id=\"{userID}\" AND isActive=TRUE")
+            
+            result = cursor.fetchall()
+            for x in result:
+                return True
+            return False
+        finally:
+            cursor.close()
+            self.close_connection(conn)
     
     def createMessage(self, userID: str, recipientID: str, message: str) -> bool:
+        conn = self.get_connection()
+        
+        if conn == None:
+            return False
+        
         try:
-            cursor = self.getDatabase().cursor()
+            cursor = conn.cursor()
             cursor.execute(f"INSERT INTO message(sender_id, body) VALUES(\"{userID}\", \"{message}\")")
-            self.getDatabase().commit()
+            conn.commit()
             
             cursor.execute(f"SELECT LAST_INSERT_ID()")
             result = cursor.fetchone()
             
             message_id = result[0]
             cursor.execute(f"INSERT INTO message_recipient(recipient_id, message_id, is_read) VALUES(\"{recipientID}\", \"{message_id}\", FALSE)")
-            self.getDatabase().commit()
+            conn.commit()
             return True
         except:
             return False
+        finally:
+            cursor.close()
+            self.close_connection(conn)
         
     def getUserMessages(self, userID: str, friendName: str, page: int) -> list[Message]:
+        conn = self.get_connection()
+        
+        if conn == None:
+            return None
+        
         try: 
             friendID = self.getUUID(friendName)
-            cursor = self.getDatabase().cursor()
+            cursor = conn.cursor()
             
             messages: list[Message] = []
         
@@ -181,10 +337,18 @@ LIMIT {page*50},{(page+1)*50}
             return messages
         except:
             return None
+        finally:
+            cursor.close()
+            self.close_connection(conn)
         
     def getLastMessage(self, userID: str, targetID: str) -> Message:
+        conn = self.get_connection()
+        
+        if conn == None:
+            return None
+        
         try: 
-            cursor = self.getDatabase().cursor()
+            cursor = conn.cursor()
             
             message: Message = None
         
@@ -211,3 +375,6 @@ LIMIT 1
             return message
         except:
             return None
+        finally:
+            cursor.close()
+            self.close_connection(conn)
