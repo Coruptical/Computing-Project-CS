@@ -29,14 +29,18 @@ class WebsocketServer:
         self.server_address = server_address
 
     def removeActiveSocket(self, websocket):
+        """Removes an active socket from all of our data lists."""
         self.active_clients.remove(websocket)
         userid = self.authorised_socketIDS[websocket]
         self.authorised_sockets.remove(websocket)
         self.authorised_clients.pop(userid)
         self.authorised_socketIDS.pop(websocket)
 
-    # This method is called when a websocket is connected to the server.
     async def handle_websocket(self, websocket: WebSocketServerProtocol):
+        """This method is called when a websocket is connected to the server.
+        It handles the incoming message (request, hopefully) from the socket
+        After it determines which request we need to handle, it sends this over to the request handler to do the work.
+        """
         print("WebSocket connected")
         self.active_clients.add(websocket)
         try:
@@ -99,8 +103,6 @@ class WebsocketServer:
                         await self.requestHandler.handleGetFriendList(self.authorised_socketIDS[websocket], data, websocket)
                     elif requestType == "GET_FRIEND_REQUESTS":
                         await self.requestHandler.handleGetFriendRequests(self.authorised_socketIDS[websocket], data, websocket)
-                    elif requestType == "USER_CHAT_OPEN":
-                        response = await self.requestHandler.handleUserChatOpen(self.authorised_socketIDS[websocket], data, websocket)
                     elif requestType == "GET_MESSAGES":
                         await self.requestHandler.handleGetMessages(self.authorised_socketIDS[websocket], data, websocket)
                     else:
@@ -117,8 +119,11 @@ class WebsocketServer:
                 self.removeActiveSocket(websocket)
             print("WebSocket connection closed")
         
-    # Creates a new loop to handle_websocket method to process new incoming connections.
+    
     def websocket_caller(self):
+        """Creates a new loop to handle_websocket method to process new incoming connections.
+        This will call the handle_websocket method for any incoming connection to this address.
+        """
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
@@ -128,19 +133,10 @@ class WebsocketServer:
         server = loop.run_until_complete(start_server())
         loop.run_forever()
         
-    # Run WebSocket server in new thread.
+    
     def start(self):
+        """Run WebSocket server in new thread.
+        This allows our other program threads to do work while we are waiting for incoming connections.
+        """
         server_thread = threading.Thread(target=self.websocket_caller, daemon=True)
         server_thread.start()
-
-# Main method
-def main():
-    server = WebsocketServer()
-    server.start()
-    
-    msg = ""
-    while msg != "!":
-        msg = input()
-    
-if __name__ == "__main__":
-    main()

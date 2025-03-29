@@ -1,14 +1,14 @@
 import mysql.connector as mysql
 from mysql.connector import MySQLConnection
-from mysql.connector.pooling import PooledMySQLConnection
 import uuid
 from models.message import Message
 
 class DatabaseHandler:
     _database: MySQLConnection = None
     
+    
     def __init__(self, host: str, user: str, password: str, database: str, pool_size=16):
-        """Initialize database connection pool."""
+        """Initialise database connection pool"""
         self.db_config = {
             "host": host,
             "user": user,
@@ -34,17 +34,12 @@ class DatabaseHandler:
             return None
         
     def close_connection(self, conn: MySQLConnection):
-        """Close (return) the connection to the pool."""
+        """Close the connection to the pool."""
         if conn and conn.is_connected():
             conn.close()
-        
-    # def getDatabase(self) -> MySQLConnection:
-    #     return self._database
-    
-    # def setDatabase(self, database: str) -> None:
-    #     self.getDatabase().cursor().execute(f"USE {database}")
     
     def userExists(self, username: str) -> bool:
+        """Check if a user exists in the database by their username."""
         conn = self.get_connection()
         
         if conn == None:
@@ -64,6 +59,7 @@ class DatabaseHandler:
             self.close_connection(conn)
     
     def createUser(self, username: str, passwordSalt: str, password: str) -> bool:
+        """Create a new user in the database."""
         conn = self.get_connection()
         
         if conn == None:
@@ -82,6 +78,7 @@ class DatabaseHandler:
             self.close_connection(conn)
         
     def fetchPasswordAndSalt(self, username: str) -> tuple[bytes, bytes]:
+        """Get the password hash and salt for a given username."""
         conn = self.get_connection()
         
         if conn == None:
@@ -97,6 +94,7 @@ class DatabaseHandler:
             self.close_connection(conn)
         
     def getUUID(self, username: str) -> str:
+        """Get the UUID of a user by their username"""
         conn = self.get_connection()
         
         if conn == None:
@@ -114,6 +112,7 @@ class DatabaseHandler:
             self.close_connection(conn)
         
     def getUsername(self, userID: str) -> str:
+        """Get the username of a user by their UUID"""
         conn = self.get_connection()
         
         if conn == None:
@@ -129,8 +128,9 @@ class DatabaseHandler:
         finally:
             cursor.close()
             self.close_connection(conn)
-        
+    
     def getFriends(self, userID: str) -> list[str]:
+        """Get a list of friend IDs for the given user ID."""
         conn = self.get_connection()
         
         if conn == None:
@@ -150,6 +150,7 @@ class DatabaseHandler:
             self.close_connection(conn)
     
     def getFriendList(self, userID: str) -> list[str]:
+        """Get a friend list of users for the given user ID."""
         conn = self.get_connection()
         
         if conn == None:
@@ -172,6 +173,7 @@ class DatabaseHandler:
             self.close_connection(conn)
     
     def getFriendRequests(self, userID: str) -> list[str]:
+        """Get a list of friend requests for the given user ID."""
         conn = self.get_connection()
         
         if conn == None:
@@ -194,6 +196,7 @@ class DatabaseHandler:
             self.close_connection(conn)
             
     def createFriendConnection(self, userID: str, targetID: str) -> bool:
+        """Create a friend connection in the friendship database table."""
         conn = self.get_connection()
         
         if conn == None:
@@ -213,6 +216,7 @@ class DatabaseHandler:
             self.close_connection(conn)
         
     def removeFriendConnection(self, userID: str, targetID: str) -> bool:
+        """Set a friend connection to inactive, effectively removing that connection."""
         conn = self.get_connection()
         
         if conn == None:
@@ -230,6 +234,7 @@ class DatabaseHandler:
             self.close_connection(conn)
             
     def setFriendRequestInactive(self, recipientID: str, senderID: str) -> bool:
+        """Set a friend request to inactive, effectively removing that friend request."""
         conn = self.get_connection()
         
         if conn == None:
@@ -247,6 +252,7 @@ class DatabaseHandler:
             self.close_connection(conn)
             
     def createFriendRequest(self, userID: str, targetID: str) -> bool:
+        """Create a friend request between two users, given the user ID and target ID."""
         conn = self.get_connection()
         
         if conn == None:
@@ -261,6 +267,7 @@ class DatabaseHandler:
             self.close_connection(conn)
         
     def checkFriendRequest(self, userID: str, targetID: str) -> bool:
+        """Check if a friend request is active between a user ID and a friend ID."""
         conn = self.get_connection()
         
         if conn == None:
@@ -279,6 +286,7 @@ class DatabaseHandler:
             self.close_connection(conn)
     
     def createMessage(self, userID: str, recipientID: str, message: str) -> bool:
+        """Store a message sent by a user ID and link it to a recipient ID."""
         conn = self.get_connection()
         
         if conn == None:
@@ -303,6 +311,7 @@ class DatabaseHandler:
             self.close_connection(conn)
         
     def getUserMessages(self, userID: str, friendName: str, page: int) -> list[Message]:
+        """Get a shortened list of all of the messages that a user has with a friend, given the user ID and friend name."""
         conn = self.get_connection()
         
         if conn == None:
@@ -342,6 +351,7 @@ LIMIT {page*50},{(page+1)*50}
             self.close_connection(conn)
         
     def getLastMessage(self, userID: str, targetID: str) -> Message:
+        """Get the last message that was exchanged between two users, given the user ID and target ID."""
         conn = self.get_connection()
         
         if conn == None:

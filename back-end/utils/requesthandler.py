@@ -5,12 +5,17 @@ from websockets.legacy.server import WebSocketServerProtocol
 from models.message import Message
 
 class RequestHandler:
+    """Request handler. Processes the data from all incoming requests, and returns responses to the client."""
     _databaseHandler: DatabaseHandler = None
     
     def __init__(self, databaseHandler: DatabaseHandler):
+        """I need to access the database handler a lot to access data from the database."""
         self._databaseHandler = databaseHandler
     
     async def handleRegisterRequest(self, data: dict, websocket: WebSocketServerProtocol):
+        """Attempts to register a new user with the given username. The password is salted and hashed, then stored.
+        If the username already exists, the account will fail to be made and we return an error message back to the socket.
+        """
         username = data['username']
         password = data['password']
         
@@ -36,9 +41,13 @@ class RequestHandler:
         await websocket.send(json.dumps(socket_response))
         
     async def handleLoginRequest(self, data: dict, websocket: WebSocketServerProtocol) -> dict:
+        """Attempts to login a new user with the given username and password.
+        If the username doesn't exist, we return an error message back to the socket.
+        The password salt and hash is gotten from the database.
+        We salt and hash the given password and compare them. If they're the same the socket is authenticated.
+        """
         username = data['username']
         password = data['password']
-        print(data)
         
         response = {
             "success": False,
@@ -70,8 +79,13 @@ class RequestHandler:
         return response
             
     async def handleUserAddFriend(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
-        print(userID)
-        print(data)
+        """Attempts to create a friend request between the user and another given user.
+        We return an error message back to the socket if:
+        - The given username doesn't exist
+        - The two users are already friends
+        - This friend request is already active (exists)
+        If not, the database handler then creates an active friend request.
+        """
         targetUsername = data['targetUsername']
         
         socket_response = {
@@ -88,7 +102,6 @@ class RequestHandler:
         
         targetID = self._databaseHandler.getUUID(targetUsername)
         friends = self._databaseHandler.getFriends(userID)
-        print(friends)
         if targetID in friends:
             socket_response['message'] = 'FRIEND_CONNECTION_EXISTS'
             await websocket.send(json.dumps(socket_response))
@@ -112,6 +125,12 @@ class RequestHandler:
         
         
     async def handleUserRemoveFriend(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
+        """Attempts to remove the friend connection between the user and the target user.
+        We return an error message back to the socket if:
+        - The username target doesn't exist
+        - The two users are already not friends
+        If not, the friend connection is removed (set to in-active).
+        """
         targetUsername = data['targetUsername']
         
         socket_response = {
@@ -140,8 +159,12 @@ class RequestHandler:
         await websocket.send(json.dumps(socket_response))
     
     async def handleUserAcceptRequest(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
-        print(userID)
-        print(data)
+        """Attempts to handle a user accepting a friend request from another user.
+        We return an error message back to the socket if:
+        - The target username doesn't exist
+        - The two users are already friends
+        If not, the friend connection is established by the database handler between the two users.
+        """
         targetUsername = data['targetUsername']
         
         socket_response = {
@@ -162,17 +185,20 @@ class RequestHandler:
         
         success = self._databaseHandler.createFriendConnection(userID, targetID)
         if success:
-            print("Friendship created.")
             socket_response['responseSuccess'] = True
         
         self._databaseHandler.setFriendRequestInactive(userID, targetID)
         await websocket.send(json.dumps(socket_response))
     
     async def handleUserDenyRequest(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
-        print(userID)
-        print(data)
+        """Attempts to handle a user denying a friend request from another user.
+        We return an error message back to the socket if:
+        - The target username doesn't exist
+        - The two users are already friends
+        If not, no friend connection is established and the request gets removed (becomes in-active).
+        """
         targetUsername = data['targetUsername']
-        
+    
         socket_response = {
             'responseSuccess': False,
             'request': data['requestType'],
@@ -196,10 +222,15 @@ class RequestHandler:
             
         await websocket.send(json.dumps(socket_response))
     
-    # TODO: Send response to tell user that the target user isn't friends with them.
     async def handleUserMessage(self, userID: str, data: dict, websocket: WebSocketServerProtocol, connected_sockets: dict[str: WebSocketServerProtocol]):
-        print(userID)
-        print(data)
+        """Attempts to handle the sending of a message from one user to another.
+        We return an error message back to the socket if:
+        - The username target doesn't exist
+        - The message isn't created for an external reason
+        We check the list of connected sockets to check if the target user is online.
+        If they are, we can send them an incoming message from this user.
+        If they're not, the message gets stored by the database handler.
+        """
         targetUsername = data['targetUsername']
         
         socket_response = {
@@ -226,7 +257,6 @@ class RequestHandler:
             
             try:
                 targetSocket = connected_sockets[targetID]
-                print("Target socket online")
                 
                 # Set up data to send to target user
                 targetMessage = self._databaseHandler.getLastMessage(userID, targetID)
@@ -240,12 +270,14 @@ class RequestHandler:
                 await targetSocket.send(json.dumps(target_data))
             except:
                 pass
-                print("Target socket offline")
                 
         
         await websocket.send(json.dumps(socket_response))
         
     async def handleGetFriendList(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
+        """Attempts to get the friend list of a user.
+        Calls the database handler, and sends the friend list back to the socket.
+        """
         friends = self._databaseHandler.getFriendList(userID)
     
         
@@ -262,6 +294,9 @@ class RequestHandler:
         await websocket.send(json.dumps(socket_response))
         
     async def handleGetFriendRequests(self, userID: str, data:dict, websocket: WebSocketServerProtocol):
+        """Attempts to get a user's friend requests.
+        Calls the database handler, and sends the friend requests back to the socket.
+        """
         socket_response = {
             'responseSuccess': False,
             'request': data['requestType'],
@@ -277,6 +312,11 @@ class RequestHandler:
         await websocket.send(json.dumps(socket_response))
         
     async def handleGetMessages(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
+        """Attempts to get all the message of a user.
+        Sets the page number (which is determined by the client)
+        Calls the database handler to get the messages up to that page number
+        Returns the messages to the socket.
+        """
         page = data['page']
         friendName = data['friendName']
         
@@ -294,5 +334,3 @@ class RequestHandler:
             
         await websocket.send(json.dumps(socket_response))
     
-    async def handleUserChatOpen(self, userID: str, data: dict, websocket: WebSocketServerProtocol):
-        pass
